@@ -2,6 +2,7 @@
 
 namespace Vsch\TranslationManager\Repositories;
 
+use Illuminate\Support\Facades\DB;
 use Vsch\TranslationManager\Models\Translation;
 
 class PostgresTranslatorRepository extends TranslatorRepository
