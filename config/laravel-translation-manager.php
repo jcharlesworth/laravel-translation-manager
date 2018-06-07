@@ -5,10 +5,21 @@ return array(
     /**
      * Specify the locale that is used for creating the initial translation strings. This locale is considered
      * to be the driver of all other translations.
+     * 
+     * For exported JSON translations that were newly created, it is this locale's database value that will be used  
+     * as the JSON translation key for all locales, and if no translation for primary locale is set then the key will be used as the translation 
      *
      * @type string
      */
     'primary_locale' => 'en',
+    /**
+     * Specify the maximum translation key length to generate for JSON translation keys
+     * it will be the smaller of 120 and this value. These are keys in the database, not JSON translation files
+     * making them too long will makes the WebUI waste more space displaying keys
+     * 
+     * @type integer
+     */
+    'json_dbkey_length' => 32,
     /**
      * Specify any additional locales that you want to be shown even if they have no translation files or translations in the database
      *
@@ -17,6 +28,31 @@ return array(
     'locales' => [
         'en',
     ],
+    /**
+     * Disable React-UI link in WebUI and route to UI
+     *
+     * @type boolean
+     */
+    'disable-react-ui' => false,
+    /**
+     * Disable React-UI link only
+     *
+     * @type boolean
+     */
+    'disable-react-ui-link' => false,
+    /**
+     * Set to true to have newly created JSON group entries get primary locale translation string as their key
+     * false for having new keys default on export to ltm key. true by default
+     *
+     * @type boolean
+     */
+    'new-json-keys-primary-locale' => true,
+    /**
+     * What character to use for separating words in json generated keys. Only first char is used.
+     *
+     * @type string 
+     */
+    'new-json-keys-separator' => '-',
     /**
      * Specify locales that you want to show in the web interface, if empty or not provided then all locales in the database
      * will be shown
@@ -342,22 +378,35 @@ return array(
             'root' => '/vendor/{vendor}/{package}',
             'files' => 'resources/lang/{locale}/{group}',
         ],
+
+        // this will make LTM translation importable as wbn:vsch.laravel-translation-manager.messages
+//        'vendor' => [
+//            'include' => ['vsch/laravel-translation-manager'],
+//            'root' => '/vendor/{vendor}/{package}',
+//            'files' => 'resources/lang/{locale}/{group}',
+//        ],
+//
+//        'vsch/laravel-translation-manager' => [
+//            '__merge' => ['workbench', 'vendor',],
+//            'db_group' => 'wbn:{vendor}.{package}::{group}',
+//        ],
+    
         /*
-         * add packages that need special mapping to their language files because they don't use the standard Laravel
-         * layout for the version that you are using or just plain not Laravel layout. Add '__merge' key with names of
-         * sections where the package should be attempted to be merged.
-         *
-         * These will be merged with vendor or workbench type to get the rest of the config information.
-         * The sections will be checked in the order listed in the __merge entry. The first section whose include
-         * accepts the vendor/package used here, will be used. All the other sections, listed in __merge, will be ignored.
-         *
-         * Since vendor section requires opt-in, it is listed first, if this package is included then
-         * it will be a vendor type.
-         *
-         * NOTE: Regardless of whether the directory exists or not under vendor if the vendor section includes this
-         * package, then it will be expected to be in the vendor directory. If it is not then no language files will be
-         * loaded for it. Therefore only include in vendor section if it is not actually located in workbench.
-         */
+        * add packages that need special mapping to their language files because they don't use the standard Laravel
+        * layout for the version that you are using or just plain not Laravel layout. Add '__merge' key with names of
+        * sections where the package should be attempted to be merged.
+        *
+        * These will be merged with vendor or workbench type to get the rest of the config information.
+        * The sections will be checked in the order listed in the __merge entry. The first section whose include
+        * accepts the vendor/package used here, will be used. All the other sections, listed in __merge, will be ignored.
+        *
+        * Since vendor section requires opt-in, it is listed first, if this package is included then
+        * it will be a vendor type.
+        *
+        * NOTE: Regardless of whether the directory exists or not under vendor if the vendor section includes this
+        * package, then it will be expected to be in the vendor directory. If it is not then no language files will be
+        * loaded for it. Therefore only include in vendor section if it is not actually located in workbench.
+        */
         'caouecs/laravel-lang' => [
             '__merge' => ['vendor', 'workbench',],
             'files' => 'src/{locale}/{group}',
@@ -385,5 +434,35 @@ return array(
      *
      */
     'zip_root' => '/resources',
-
+    
+    'find' => [
+        'functions' => ($functions = [
+            'trans',
+            'trans_choice',
+            'noEditTrans',
+            'ifEditTrans',
+            'Lang::get',
+            'Lang::choice',
+            'Lang::trans',
+            'Lang::transChoice',
+            '@lang',
+            '@choice',
+            '__',
+        ]),
+        'pattern' => [                              // See http://regexr.com/392hu
+            '(' . implode('|', $functions) . ')',   // Must start with one of the functions
+            '\\(',                                  // Match opening parentheses
+            "(['\"])",                              // Match " or '
+            '(',                                    // Start a new group to match:
+            '[a-zA-Z0-9_-]+',                       // Must start with group
+            "([.][^\1)]+)+",                        // Be followed by one or more items/keys
+            ')',                                    // Close group
+            "['\"]",                                // Closing quote
+            '[\\),]',                                // Close parentheses or new parameter
+        ],
+        'files' => [
+            'php',
+            'twig',
+        ],
+    ],
 );

@@ -6,7 +6,11 @@
             <div class="col-sm-8">
                 <div class="row">
                     <div class="col-sm-12">
-                        <h1>@lang($package . '::messages.translation-manager')</h1>
+                        <h1>@lang($package . '::messages.translation-manager')
+                            @if(!$disableUiLink)
+                                <a style='float: right; font-size: 14px;' href='<?= action($controller . '@getUI', []) ?>'>@lang($package . '::messages.try-new-ui')</a>
+                            @endif
+                        </h1>
                         {{-- csrf_token() --}}
                         {{--{!! $userLocales !!}--}}
                     </div>
@@ -99,12 +103,12 @@
                                                 </div>
                                             </div>
                                             <div class="col-sm-6">
-                                                <?= ifEditTrans($package . '::messages.import-groups') ?>
+                                                <?= ifEditTrans($package . '::messages.import-all-groups') ?>
                                                 <?= ifEditTrans($package . '::messages.loading') ?>
                                                 <button id="submit-import-all" type="submit" form="form-import-all"
                                                         class="btn btn-sm btn-success"
                                                         data-disable-with="<?= noEditTrans($package . '::messages.loading') ?>">
-                                                    <?= noEditTrans($package . '::messages.import-groups') ?>
+                                                    <?= noEditTrans($package . '::messages.import-all-groups') ?>
                                                 </button>
                                                 <?= ifEditTrans($package . '::messages.zip-all') ?>
                                                 <a href="<?= action($controller . '@getZippedTranslations', ['group' => '*']) ?>"
@@ -112,19 +116,19 @@
                                                     <?= noEditTrans($package . '::messages.zip-all') ?>
                                                 </a>
                                                 <div class="input-group" style="float:right; display:inline">
-                                                    <?= ifEditTrans($package . '::messages.publish-all') ?>
+                                                    <?= ifEditTrans($package . '::messages.publish-all-groups') ?>
                                                     <?= ifEditTrans($package . '::messages.publishing') ?>
                                                     <button type="submit" form="form-publish-all"
                                                             class="btn btn-sm btn-warning input-control"
                                                             data-disable-with="<?= noEditTrans($package . '::messages.publishing') ?>">
-                                                        <?= noEditTrans($package . '::messages.publish-all') ?>
+                                                        <?= noEditTrans($package . '::messages.publish-all-groups') ?>
                                                     </button>
-                                                    <?= ifEditTrans($package . '::messages.find-in-files') ?>
+                                                    <?= ifEditTrans($package . '::messages.add-references') ?>
                                                     <?= ifEditTrans($package . '::messages.searching') ?>
                                                     <button type="submit" form="form-find"
                                                             class="btn btn-sm btn-danger"
                                                             data-disable-with="<?= noEditTrans($package . '::messages.searching') ?>">
-                                                        <?= noEditTrans($package . '::messages.find-in-files') ?>
+                                                        <?= noEditTrans($package . '::messages.add-references') ?>
                                                     </button>
                                                 </div>
                                             </div>
@@ -183,11 +187,11 @@
                                                     data-disable-with="<?= noEditTrans($package . '::messages.loading') ?>">
                                                 <?= noEditTrans($package . '::messages.import-group') ?>
                                             </button>
-                                            <?= ifEditTrans($package . '::messages.delete') ?>
+                                            <?= ifEditTrans($package . '::messages.delete-group') ?>
                                             <?= ifEditTrans($package . '::messages.deleting') ?>
                                             <button type="submit" form="form-delete-group" class="btn btn-sm btn-danger"
                                                     data-disable-with="<?= noEditTrans($package . '::messages.deleting') ?>">
-                                                <?= noEditTrans($package . '::messages.delete') ?>
+                                                <?= noEditTrans($package . '::messages.delete-group') ?>
                                             </button>
                                             <?php endif; ?>
                                         </div>
@@ -199,26 +203,28 @@
                                         <?php endif; ?>
                                         <?php endif; ?>
                                     </div>
-                                    <?= ifEditTrans($package . '::messages.confirm-delete') ?>
-                                    <form id="form-delete-group" class="form-inline form-delete-group" method="POST"
-                                            action="<?= action($controller . '@postDeleteAll', $group) ?>"
-                                            data-remote="true" role="form"
-                                            data-confirm="<?= noEditTrans($package . '::messages.confirm-delete', ['group' => $group]) ?>">
-                                        <input type="hidden" name="_token" value="<?php echo csrf_token(); ?>">
-                                    </form>
-                                    <form id="form-import-group" class="form-inline form-import-group" method="POST"
-                                            action="<?= action($controller . '@postImport', $group) ?>"
-                                            data-remote="true" role="form">
-                                        <input type="hidden" name="_token"
-                                                value="<?php echo csrf_token(); ?>">
-                                    </form>
-                                    <form role="form" class="form" id="form-select"></form>
-                                    <form id="form-publish-group" class="form-inline form-publish-group" method="POST"
-                                            action="<?= action($controller . '@postPublish', $group) ?>"
-                                            data-remote="true" role="form">
-                                        <input type="hidden" name="_token"
-                                                value="<?php echo csrf_token(); ?>">
-                                    </form>
+                                    <?php if ($group): ?>
+                                        <?= ifEditTrans($package . '::messages.confirm-delete') ?>
+                                        <form id="form-delete-group" class="form-inline form-delete-group" method="POST"
+                                                action="<?= action($controller . '@postDeleteAll', $group) ?>"
+                                                data-remote="true" role="form"
+                                                data-confirm="<?= noEditTrans($package . '::messages.confirm-delete', ['group' => $group]) ?>">
+                                            <input type="hidden" name="_token" value="<?php echo csrf_token(); ?>">
+                                        </form>
+                                        <form id="form-import-group" class="form-inline form-import-group" method="POST"
+                                                action="<?= action($controller . '@postImport', $group) ?>"
+                                                data-remote="true" role="form">
+                                            <input type="hidden" name="_token"
+                                                    value="<?php echo csrf_token(); ?>">
+                                        </form>
+                                        <form role="form" class="form" id="form-select"></form>
+                                        <form id="form-publish-group" class="form-inline form-publish-group" method="POST"
+                                                action="<?= action($controller . '@postPublish', $group) ?>"
+                                                data-remote="true" role="form">
+                                            <input type="hidden" name="_token"
+                                                    value="<?php echo csrf_token(); ?>">
+                                        </form>
+                                    <?php endif; ?>    
                                     <form id="form-publish-all" class="form-inline form-publish-all" method="POST"
                                             action="<?= action($controller . '@postPublish', '*') ?>"
                                             data-remote="true" role="form">
@@ -252,7 +258,7 @@
                     <div class="col-sm-12">
                         <div style="min-height: 10px"></div>
                         <form class="form-inline" id="form-interface-locale" method="GET"
-                                action="<?= action($controller . '@getInterfaceLocale') ?>">
+                                action="<?= action($controller . '@getTranslationLocales') ?>">
                             <input type="hidden" name="_token" value="<?php echo csrf_token(); ?>">
                             <div class="row">
                                 <div class=" col-sm-3">
@@ -337,17 +343,26 @@
                                                     class="btn btn-sm btn-default"><?= noEditTrans($package . '::messages.check-none')?></button>
                                         </div>
                                     </div>
+                                    <div class="row">
+                                        <div class=" col-sm-12">
+                                            <div style="min-height: 10px"></div>
+                                            <?= ifEditTrans($package . '::messages.show-published-site') ?>
+                                            <?= ifEditTrans($package . '::messages.show-unpublished-site') ?>
+                                            <a class="btn btn-xs btn-default" role="button" id="show-unpublished-site" href="<?= action($controller . '@getToggleShowUnpublished') ?>">
+                                                <?= noEditTrans($package . ($show_unpublished ? '::messages.show-published-site' : '::messages.show-unpublished-site')) ?>
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class=" col-sm-8">
                                     <div class="input-group-sm">
                                         @foreach($locales as $locale)
-                                            <?php $isLocaleEnabled = str_contains($userLocales, ',' . $locale . ','); ?>
                                             <label>
                                                 <input <?= $locale !== $primaryLocale && $locale !== $translatingLocale ? ' class="display-locale" ' : '' ?> name="d[]"
                                                         type="checkbox"
                                                         value="<?=$locale?>"
-                                                <?= ($locale === $primaryLocale || $locale === $translatingLocale || array_key_exists($locale, $displayLocales)) ? 'checked' : '' ?>
-                                                    <?= $locale === $primaryLocale ? ' disabled' : '' ?>><?= $locale ?>
+                                                <?= ($locale === $primaryLocale || $locale === $translatingLocale || array_search($locale, $displayLocales) !== false) ? 'checked' : '' ?>
+                                                    <?= $locale === $primaryLocale || $locale === $translatingLocale ? ' disabled' : '' ?>><?= $locale ?>
                                             </label>
                                         @endforeach
                                     </div>
@@ -428,10 +443,7 @@
             </div>
         </div>
         <?= ifEditTrans($package . '::messages.enter-translation') ?>
-        <?= ifEditTrans($package . '::messages.missmatched-quotes') ?>
-        <script>
-            var MISSMATCHED_QUOTES_MESSAGE = "<?= noEditTrans(($package . '::messages.missmatched-quotes'))?>";
-        </script>
+        <?= ifEditTrans($package . '::messages.mismatched-quotes') ?>
         <?php if($group): ?>
         <div class="row">
             <div class="col-sm-12 ">
@@ -473,7 +485,7 @@
                                 <div class="panel-body">
                                     <!-- Add Keys Form -->
                                     <div class="col-sm-12">
-                                        <?=  Form::open(['id' => 'form-addkeys', 'method' => 'POST', 'action' => [$controller . '@postAdd', $group]]) ?>
+                                        <?=  Form::open(['id' => 'form-addkeys', 'method' => 'POST', 'action' => [$controller . '@postAddSuffixedKeys', $group]]) ?>
                                         <div class="row">
                                             <div class="col-sm-6">
                                                 <label for="keys">@lang($package . '::messages.keys'):</label><?= ifEditTrans($package . '::messages.addkeys-placeholder') ?>
@@ -853,6 +865,22 @@
         var URL_TRANSLATOR_FILTERS = '<?= action($controller . '@getTransFilters') ?>';
         var CURRENT_GROUP = '<?= $group ?>';
         var MARKDOWN_KEY_SUFFIX = '<?= $markdownKeySuffix ?>';
+        
+        // provide translations for JavaScript
+        var MISMATCHED_QUOTES_MESSAGE = "<?= noEditTrans(($package . '::messages.mismatched-quotes'))?>";
+        var TITLE_SAVE_CHANGES = "<?= noEditTrans(($package . '::messages.title-save-changes'))?>";
+        var TITLE_CANCEL_CHANGES = "<?= noEditTrans(($package . '::messages.title-cancel-changes'))?>";
+        var TITLE_TRANSLATE = "<?= noEditTrans(($package . '::messages.title-translate'))?>";
+        var TITLE_CONVERT_KEY = "<?= noEditTrans(($package . '::messages.title-convert-key'))?>";
+        var TITLE_GENERATE_PLURALS = "<?= noEditTrans(($package . '::messages.title-generate-plurals'))?>";
+        var TITLE_CLEAN_HTML_MARKDOWN = "<?= noEditTrans(($package . '::messages.title-clean-html-markdown'))?>";
+        var TITLE_CAPITALIZE = "<?= noEditTrans(($package . '::messages.title-capitalize'))?>";
+        var TITLE_LOWERCASE = "<?= noEditTrans(($package . '::messages.title-lowercase'))?>";
+        var TITLE_CAPITALIZE_FIRST_WORD = "<?= noEditTrans(($package . '::messages.title-capitalize-first-word'))?>";
+        var TITLE_SIMULATED_COPY = "<?= noEditTrans(($package . '::messages.title-simulated-copy'))?>";
+        var TITLE_SIMULATED_PASTE = "<?= noEditTrans(($package . '::messages.title-simulated-paste'))?>";
+        var TITLE_RESET_EDITOR = "<?= noEditTrans(($package . '::messages.title-reset-editor'))?>";
+        var TITLE_LOAD_LAST = "<?= noEditTrans(($package . '::messages.title-load-last'))?>";
     </script>
 
     <!-- Moved out to allow auto-format in PhpStorm w/o screwing up HTML format -->
@@ -865,32 +893,31 @@
         if ($user->locales) {
             foreach (explode(",", $user->locales) as $userLocale) {
                 $userLocale = trim($userLocale);
-                if ($userLocale) $userLocaleList[$userLocale] = $userLocale;
+                if ($userLocale) $userLocaleList[] = $userLocale;
             }
         }
     }
 
     foreach ($displayLocales as $userLocale) {
-        $userLocaleList[$userLocale] = $userLocale;
+        $userLocaleList[] = $userLocale;
     }
 
+    $userLocaleList = array_unique($userLocaleList);
     natsort($userLocaleList);
     ?>
 
     <script>
-        var TRANS_FILTERS = ({
-            filter: "<?= isset($transFilters['filter']) ? $transFilters['filter'] : "" ?>",
-            regex: "<?= isset($transFilters['regex']) ? $transFilters['regex'] : ""  ?>"
-        });
+var TRANS_FILTERS = ({
+filter: "<?= isset($transFilters['filter']) ? $transFilters['filter'] : "" ?>",
+regex: "<?= isset($transFilters['regex']) ? $transFilters['regex'] : ""  ?>"
+});
 
-        var USER_LOCALES = [
-                <?php $addComma = false; ?>
-                <?php foreach ($userLocaleList as $locale): ?>
-                <?php if ($addComma) echo ","; else $addComma = true; ?> {
-                value: '<?= $locale ?>', text: '<?= $locale ?>'
-            }
-            <?php endforeach; ?>
-        ];
+<?php $addComma = false; ?>
+var USER_LOCALES = [
+<?php foreach ($userLocaleList as $locale): ?>
+  <?php if ($addComma) echo ","; else $addComma = true; ?> { value: '<?= $locale ?>', text: '<?= $locale ?>' }
+<?php endforeach; ?>
+];
     </script>
 @stop
 

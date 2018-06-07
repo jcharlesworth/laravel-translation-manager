@@ -1,10 +1,24 @@
 # Laravel 5 Translation Manager
 
+[![GitQ](https://gitq.com/badge.svg)](https://gitq.com/vsch/laravel-translation-manager)
+
 This package is used to comfortably manage, view, edit and translate Laravel language files with
 translation assistance through the Yandex Translation API. It augments the Laravel Translator
 system with a ton of practical functionality. [Features]
 
-:warning: Only MySQL and PostgreSQL Database connections are supported.
+:warning: Only **MySQL** and **PostgreSQL** Database connections are supported. Adding another
+database only requires additional repository interface implementations following the examples of
+[MysqlTranslatorRepository.php] or [PostgresTranslatorRepository.php].
+
+#### :warning: **Version 2.6.10 has a new migration** 
+
+When upgrading from earlier versions run:
+
+```bash
+$ php artisan vendor:publish --provider="Vsch\TranslationManager\ManagerServiceProvider" --tag=public --force
+$ php artisan vendor:publish --provider="Vsch\TranslationManager\ManagerServiceProvider" --tag=migrations
+$ php artisan migrate
+```
 
 **Detailed information is now in the [wiki].**
 
@@ -12,8 +26,12 @@ system with a ton of practical functionality. [Features]
 [Configuration][]  
 [Version Notes][]
 
-[![GitQ](https://gitq.com/badge.svg)](https://gitq.com/vsch/laravel-translation-manager)
+#### 2.6.16 Adds React App UI as an alternative to WebUI 
 
+![React_UI](../../wiki/images/React_UI.png)
+
+> * For Laravel 5.6 require: `"vsch/laravel-translation-manager": "~2.6"`
+>
 > * For Laravel 5.5 require: `"vsch/laravel-translation-manager": "~2.5"`
 >
 > * For Laravel 5.4 require: `"vsch/laravel-translation-manager": "~2.4"`
@@ -24,7 +42,7 @@ system with a ton of practical functionality. [Features]
 >
 > * For Laravel 5.2 require: `"vsch/laravel-translation-manager": "~2.1"`
 >
-> #### Laravel version 4.2 is no longer supported. 
+> #### Laravel version 4.2 is no longer supported.
 >
 > You can still get access to the last updated version. Use the `laravel4` branch, or require:
 > `"vsch/laravel-translation-manager": "~1.0"`
@@ -34,11 +52,23 @@ system with a ton of practical functionality. [Features]
 > :exclamation: If you have made correction to the auto-translated localization and would like
 > to share them with others please do so. It will be greatly appreciated.
 
-### Version 2.5.0 released
+### Version 2.6.10 released
+
+React UI added as an option to WebUI.
+
+Code updated for Laravel 5.6 compatibility
+
+Support for JSON translation files added. [Versioninfo.md](versioninfo.md#264) 
+
+### Version 2.5.6 released
+
+Support for JSON translation files added. [Versioninfo.md](versioninfo.md#256)
 
 Code updated for Laravel 5.5 compatibility
 
-### Version 2.4.20 released
+### Version 2.4.36 released
+
+Support for JSON translation files added.  [Versioninfo.md](versioninfo.md#2436)
 
 Important LTM Translator method changes to restore compatibility with Laravel 5.4 API. These
 changes affect the order of arguments to the LTM Translator implementation. If you were using
@@ -118,4 +148,6 @@ specifically change that through the web UI, see [User Admin] or by populating t
 [Version Notes]: versioninfo.md
 [Web Interface: Source References]: ../../wiki/Web-Interface#source-references
 [wiki]: ../../wiki
+[MysqlTranslatorRepository.php]: https://github.com/vsch/laravel-translation-manager/blob/master/src/Repositories/MysqlTranslatorRepository.php
+[PostgresTranslatorRepository.php]: https://github.com/vsch/laravel-translation-manager/blob/master/src/Repositories/PostgresTranslatorRepository.php
 

@@ -1,8 +1,178 @@
 ### Version Notes
 
-The 1.x.x versions are for Laravel 4.2, 2.1.x versions are for Laravel 5.1+, 2.3.x for
-Laravel 5.3 compatibility, 2.4.x for Laravel 5.4 compatibility and 2.5.x for Laravel 5.5
-compatibility. 
+The 1.x.x versions are for Laravel 4.2, 2.1.x versions are for Laravel 5.1+, 2.3.x for Laravel
+5.3, 2.4.x for Laravel 5.4, 2.5.x for Laravel 5.5 and 2.6.x for Laravel 5.6 compatibility.
+
+#### 2.6.34
+
+* Fix: #121, improve Dutch translation, thanks to [@sebsel](https://github.com/sebsel)
+
+#### 2.6.32
+
+* Fix: #119, Call to undefined function Vsch\TranslationManager\getSupportedLocale(). 
+
+#### 2.6.30
+
+* Fix: unpublished mode shows groups not in LTM database as undefined. 
+* Fix: unpublished mode showing translations marked deleted instead of as undefined
+* Fix: add missing keys to the cache to not thrash the database on every access to their
+  translations
+
+#### 2.6.28
+
+* Add: #101, is there a way to preview the changes before publishing, added button to WebUI to
+  toggle and cookie setting to show site with unpublished translations. Also added
+  `Translator::getShowUnpublished()` and `Translator::setShowUnpublished($showUnpublished)` to
+  get/set mode and cookie if `useCookies` is enabled.
+* Fix: view route missing optional group param, caused incorrect URL for group links in search,
+  overview and mismatched translations
+* Fix: editing translation in mismatches or search would update the current translations
+  regardless of group. The server data was correct only react UI would show incorrect changes
+  until translations table was refreshed from the server.
+* Fix: use status in translation mismatches to highlight entry same as in translation table.
+* Fix: remove base path prefix from translation reference paths.
+* Fix: plural translations handling in pop-up, now removes the `:count ` from individual parts
+  before sending for translation. Prefixes results with `:count ` if it was present in the
+  original. This prevents Yandex translate from getting confused and results in better plural
+  forms, especially for Russian which has 3.
+* Change: Now `|:` generates plural forms with `:count ` prefix and toggles the prefix once
+  the plurals are generated. Toggles in the pattern: plurals only prefixed, all prefixed,
+  none-prefixed.
+
+#### 2.6.26
+
+* Add: PR merge from @vesper8 for customizing regex for reference search through the config. 
+* Fix: clean out old recursive publish group code
+* Fix: zipping translations used to inadvertently publish the translations
+* Fix: JSON export now fills in any empty json -> ltm mapping keys (the translation values of
+  the `json` locale) with the key value. If the translation was not imported and not changed by
+  the user then the default value depends on the setting: `new-json-keys-primary-locale`. see
+  below.
+* Add: config options for customizing JSON translation key generation:
+
+      /**
+       * Set to true to have newly created JSON group entries get primary locale translation string as their key
+       * false for having new keys default on export to ltm key. true by default
+       *
+       * @type boolean
+       */
+      'new-json-keys-primary-locale' => true,
+      /**
+       * What character to use for separating words in json generated keys. Only first char is used.
+       *
+       * @type string 
+       */
+      'new-json-keys-separator' => '-',
+
+#### 2.6.24
+
+* Fix: if `json` locale is part of the work set and current group is not JSON then any ui
+  updates which are persisted on the server cause translation table to be reloaded.
+* Fix: un-initialized session failing on compute display locales
+
+#### 2.6.22     
+
+* Fix: when configured for in database publish, delete import would only replace import import.
+* Fix: locale working set would not include added locales if they were not part of any
+  translations in the database
+* Fix: ReferenceError when a missing translation entry appeared in non-editable locale
+* Fix: show source information
+
+#### 2.6.20          
+
+* Fix: moved line caused all buttons to have undefined urls. I blame it on the cat.
+
+#### 2.6.18
+
+* Fix: server exception on new ltm session and switching translating locale before setting
+  display locales.
+
+#### 2.6.16
+
+* Add: instructions for react manifest mods react ui files are found by mix
+* Add: instructions for config options for react ui: disable ui, disable link
+* Fix: use ltm translation files for React UI translations if not available in the database
+* Fix: cached translations not being used if namespace was not '' or '*'
+* Fix: modal to be easier to use.
+* Fix: translation mods did not always reflect changes in the translation table unless
+  refreshed.
+
+#### 2.6.14
+
+* Fix: erroneous inclusion of appDebug() instead of using config `app.debug`.
+
+#### 2.6.12
+
+* Fix: broken alternate db connections were not working properly and depending on which instance
+  of connection was used then some used default connection while others the right connection.
+
+  The standard for ALL connections is the Translation instance from TranslatorRepository and
+  used by the Manager. One instance used for queries and setting/getting the connection name.
+
+#### 2.6.10
+
+**Need to run migrations**
+
+```bash
+$ php artisan vendor:publish --provider="Vsch\TranslationManager\ManagerServiceProvider" --tag=public --force
+$ php artisan vendor:publish --provider="Vsch\TranslationManager\ManagerServiceProvider" --tag=migrations
+$ php artisan migrate
+```
+
+and
+
+* Add: React UI for LTM
+* Add: `ui_settings` to `ltm_user_locales` table to store the user's react ui app settings for
+  persistence. Sessions are too short and too much data for one cookie and splitting is a pain.
+* Fix: change `ltm_user_locales` index on user_id to unique
+* Fix: JSON json locale, used for key mapping was never saved to the database on publishing of
+  the JSON group.
+* Fix: creating new keys in the JSON group caused the `json` locale keys to stay empty instead
+  of defaulting to key name.
+
+#### Next: 2.6.6
+
+* Fix: Pass x-edit popup title translations to JS
+
+#### 2.6.6
+
+* Fix: #113, Error with PHP 7.2
+
+#### 2.6.4
+
+* Add: JSON translation file handling
+  * Stored in the LTM table under `JSON` group. JSON translation keys to LTM translation keys
+    are stored in the same group under the `json` locale.
+  * On import LTM keys are generated from Alphanumeric characters with _ between runs of
+    Alphanumeric up to a maximum of 120 or `'json_dbkey_length'`, whichever is smaller.
+  * On export the JSON to LTM key map is exported to `json.json` file in `resources/lang`
+    directory. It is needed for efficient conversion of JSON to LTM keys
+  * All features of LTM translations are supported for JSON translations: import, export, zip,
+    in-database publishing, display database value via additional `useDB` argument added to
+    `getFromJson()`
+* Fix: usage information was not being set
+
+#### 2.6.2
+
+* Fix: replace aliases with facades, merged PR from **[aiankile](https://github.com/aiankile)**
+
+#### 2.6.0
+
+* Fix: update for Laravel 5.6, merged PR from **[aiankile](https://github.com/aiankile)**
+
+#### 2.5.6
+
+* Add: JSON translation file handling
+  * Stored in the LTM table under `JSON` group. JSON translation keys to LTM translation keys
+    are stored in the same group under the `json` locale.
+  * On import LTM keys are generated from Alphanumeric characters with _ between runs of
+    Alphanumeric up to a maximum of 120 or `'json_dbkey_length'`, whichever is smaller.
+  * On export the JSON to LTM key map is exported to `json.json` file in `resources/lang`
+    directory. It is needed for efficient conversion of JSON to LTM keys
+  * All features of LTM translations are supported for JSON translations: import, export, zip,
+    in-database publishing, display database value via additional `useDB` argument added to
+    `getFromJson()`
+* Fix: usage information was not being set
 
 #### 2.5.4
 
@@ -11,6 +181,19 @@ compatibility.
 #### 2.5.2
 
 * Fix: #98, indatabase_publish not working as intended
+
+#### 2.4.36
+
+* [ ] Fix: #106, Working with arrays
+
+* [ ] Fix: #91, Cookies generating wrong locales
+
+* [ ] Add: preview mode for editors/admins, fix for #101, Is there a way to preview the changes
+      before publishing
+
+#### 2.4.34
+
+* Fix: LoaderInterface to FileLoader
 
 #### 2.4.32
 
@@ -42,7 +225,7 @@ compatibility.
 
 #### 2.4.22
 
-* Fix: #92, Translation files can not be loaded 
+* Fix: #92, Translation files can not be loaded
 
 #### 2.4.20
 
@@ -52,24 +235,25 @@ compatibility.
   From `transChoice($id, $number, array $parameters = array(), $domain = 'messages', $locale =
   null, $useDB = null)` to `transChoice($id, $number, array $parameters = array(), $locale =
   null, $domain = 'messages', $useDB = null)`
-  
+
   From `trans($id, array $parameters = array(), $domain = 'messages', $locale = null, $useDB =
   null)` to `trans($id, array $parameters = array(), $locale = null, $domain = 'messages',
   $useDB = null)`
-  
+
   From `get($key, array $replace = array(), $locale = null, $useDB = null)` to `get($key, array
   $replace = array(), $locale = null, $fallback = true, $useDB = null)`
-  
+
 #### 2.4.14
 
 * Fix: #88, Import fails without feedback, file translations being deleted on publishing
 
 #### 2.4.12
 
-* Add: `Vsch\\TranslationManager\\Events\\TranslationsPublished` event class with two attributes:
-  * `groups`, string of the groups parameter, either `*` if all or group name 
+* Add: `Vsch\\TranslationManager\\Events\\TranslationsPublished` event class with two
+  attributes:
+  * `groups`, string of the groups parameter, either `*` if all or group name
   * `errors`, array of errors resulting from the publishing.
-       
+
   Event is generated when publish is invoked through the Web UI or export from the command line.
 
 * Fix: #86, After publish file takes another array format. Added an error message when incorrect
@@ -105,7 +289,7 @@ compatibility.
 
 * Fix: #72, $locales array elements need to be filtered before passing to view
 
-#### 2.4.4``
+#### 2.4.4
 
 * Change: merge RU and UK locale translations thanks to
   [Alex Mokrenko](https://github.com/al0mie)
@@ -189,9 +373,9 @@ compatibility.
 * Add: routes entry for translations. Old routes handling no longer works, now need to add a
   call to `Translator::routes()` wrapped in appropriate middleware and prefix grouping:
 
-        \Route::group(['middleware' => 'web', 'prefix' => 'translations'], function () {
-            Translator::routes();
-        });
+      \Route::group(['middleware' => 'web', 'prefix' => 'translations'], function () {
+          Translator::routes();
+      });
 
   to be added to routes/web.php to create translator routes
 * Fix: search to list columns explicitly

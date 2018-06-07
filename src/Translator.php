@@ -3,6 +3,12 @@
 use Illuminate\Contracts\Translation\Loader;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Translation\Translator as LaravelTranslator;
 
 class Translator extends LaravelTranslator
@@ -24,6 +30,7 @@ class Translator extends LaravelTranslator
     protected $packagePrefix;
     protected $cookiePrefix;
     protected $useCookies;
+    protected $cookiesLoaded;
 
     // Storage used for used translation keys
     protected $usedKeys = array();
@@ -31,7 +38,7 @@ class Translator extends LaravelTranslator
     /**
      * Translator constructor.
      *
-     * @param \Illuminate\Foundation\Application       $app
+     * @param \Illuminate\Foundation\Application $app
      * @param \Illuminate\Contracts\Translation\Loader $loader
      * @param                                          $locale
      */
@@ -57,7 +64,7 @@ class Translator extends LaravelTranslator
     protected function isUseLottery()
     {
         if ($this->useLottery === null) {
-            $this->useLottery = !\Gate::allows(Manager::ABILITY_BYPASS_LOTTERY);
+            $this->useLottery = !Gate::allows(Manager::ABILITY_BYPASS_LOTTERY);
         }
         return $this->useLottery;
     }
@@ -67,7 +74,7 @@ class Translator extends LaravelTranslator
         if ($inPlaceEditing !== null) {
             $this->inPlaceEditing = $inPlaceEditing;
             if ($this->useCookies) {
-                \Cookie::queue($this->cookiePrefix . 'lang_inplaceedit', $this->inPlaceEditing);
+                Cookie::queue($this->cookiePrefix . 'lang_inplaceedit', $this->inPlaceEditing);
             } else {
                 $session = $this->app->make('session');
                 if ($session->all()) {
@@ -79,8 +86,8 @@ class Translator extends LaravelTranslator
 
         if ($this->inPlaceEditing === null) {
             if ($this->useCookies) {
-                if (\Cookie::has($this->cookiePrefix . 'lang_inplaceedit')) {
-                    $this->inPlaceEditing = \Cookie::get($this->cookiePrefix . 'lang_inplaceedit', 0);
+                if (Cookie::has($this->cookiePrefix . 'lang_inplaceedit')) {
+                    $this->inPlaceEditing = Cookie::get($this->cookiePrefix . 'lang_inplaceedit', 0);
                 }
             } else {
                 $session = $this->app->make('session');
@@ -89,7 +96,7 @@ class Translator extends LaravelTranslator
         }
 
         // reset in place edit mode if not logged in
-        if ($this->inPlaceEditing != 0 && !\Auth::check()) {
+        if ($this->inPlaceEditing != 0 && !Auth::check()) {
             $this->inPlaceEditing = 0;
         }
         return $this->inPlaceEditing;
@@ -107,11 +114,15 @@ class Translator extends LaravelTranslator
      */
     public function getLocale()
     {
-        if ($this->useCookies) {
-            $locale = \Cookie::get($this->cookiePrefix . 'lang_locale', parent::getLocale());
-            if ($locale != parent::getLocale()) {
-                parent::setLocale($locale);
-            }
+        if (!$this->cookiesLoaded) {
+            $key = $this->cookiePrefix . 'lang_locale';
+            $queuedCookieLocale = \Cookie::queued($key, null);
+            $locale = getSupportedLocale($queuedCookieLocale != null ? $queuedCookieLocale->getValue() : \Cookie::get($key, ''));
+            parent::setLocale($locale);
+            
+            // load unpublished translation flag at the same time
+            $this->getShowUnpublished();
+            $this->cookiesLoaded = true;
         }
         return parent::getLocale();
     }
@@ -126,9 +137,58 @@ class Translator extends LaravelTranslator
     public function setLocale($locale)
     {
         if ($this->useCookies) {
-            \Cookie::queue($this->cookiePrefix . 'lang_locale', $locale);
+            Cookie::queue($this->cookiePrefix . 'lang_locale', $locale);
         }
-        $this->locale = $locale;
+        parent::setLocale($locale);
+    }
+
+    /**
+     * Get the default showUnpublished being used.
+     *
+     * @return boolean
+     */
+    public function getShowUnpublished()
+    {
+        if (!$this->cookiesLoaded) {
+            $key = $this->cookiePrefix . 'show_unpublished';
+            $queuedCookie = \Cookie::queued($key, null);
+            $showUnpublished = $queuedCookie != null ? $queuedCookie->getValue() : \Cookie::get($key, false);
+            $this->useDB = $showUnpublished ? 2 : 1;
+            $this->cookiesLoaded = true;
+        }
+        return $this->useDB === 2;
+    }
+
+    /**
+     * Get the default showUnpublished being used.
+     *
+     * @return boolean
+     */
+    public function getShowCached()
+    {
+        return $this->useDB === 1;
+    }
+
+    /**
+     * Set the default showUnpublished.
+     *
+     * @param  string $showUnpublished
+     *
+     * @return void
+     */
+    public function setShowUnpublished($showUnpublished)
+    {
+        if ($this->useCookies) {
+            Cookie::queue($this->cookiePrefix . 'show_unpublished', $showUnpublished);
+        }
+        $this->useDB = $showUnpublished ? 2 : 1;
+    }
+
+    public function getTranslations($namespace, $group, $locale)
+    {
+        $this->load($namespace, $group, $locale);
+
+        return $this->loaded[$namespace][$group][$locale];
     }
 
     /**
@@ -185,12 +245,20 @@ class Translator extends LaravelTranslator
         return preg_match('/^[a-zA-Z0-9_-]+$/', $namespace);
     }
 
-    public function inPlaceEditLink($t, $withDiff = false, $key = null, $locale = null, $useDB = null, $group = null)
+    /**
+     * @param $t
+     * @param $withDiff
+     * @param $key
+     * @param $locale
+     * @param $useDB
+     * @param $group
+     * @return $t resolved or adjusted for details needed for edit link generation
+     */
+    public function getTranslationForEditLink($t, $withDiff, $key, $locale, $useDB, $group)
     {
         try {
             $this->suspendUsageLogging();
 
-            $diff = '';
             if (!$t && $key) {
                 if ($useDB === null) $useDB = $this->useDB;
 
@@ -211,7 +279,7 @@ class Translator extends LaravelTranslator
                             $t->saved_value = parent::get($key, [], $locale);
                             $t->status = 0;
                             if ($withDiff) {
-                                $diff = ' [' . $t->saved_value . ']';
+                                $t->diff = ''; // ' [' . $t->saved_value . ']';
                             }
                         }
                     }
@@ -219,14 +287,31 @@ class Translator extends LaravelTranslator
             }
 
             if ($t) {
-                if ($withDiff && $diff === '') {
-                    $diff = ($t->saved_value == $t->value ? '' : ($t->saved_value === $t->value ? '' : ' [' . mb_renderDiffHtml($t->saved_value, $t->value) . ']'));
+                if ($t->value === null) $t->value = '';
+
+                if ($withDiff && (!isset($t->diff) || $t->diff === '')) {
+                    $t->diff = ($t->saved_value == $t->value || !$t->save_value || !$t->value ? '' : ($t->saved_value === $t->value ? '' : mb_renderDiffHtml($t->saved_value, $t->value)));
+                } else {
+                    $t->diff = '';
                 }
+            }
+            return $t;
+        } finally {
+            $this->resumeUsageLogging();
+        }
+    }
+
+    public function inPlaceEditLink($t, $withDiff = false, $key = null, $locale = null, $useDB = null, $group = null)
+    {
+        try {
+            $this->suspendUsageLogging();
+
+            $t = $this->getTranslationForEditLink($t, $withDiff, $key, $locale, $useDB, $group);
+
+            if ($t) {
                 $title = parent::get($this->packagePrefix . 'messages.enter-translation');
 
-                if ($t->value === null) $t->value = ''; //$t->value = parent::get($key, $replace, $locale);
-
-                $action = \URL::action(ManagerServiceProvider::CONTROLLER_PREFIX . 'Vsch\TranslationManager\Controller@postEdit', array($t->group));
+                $action = URL::action(ManagerServiceProvider::CONTROLLER_PREFIX . 'Vsch\TranslationManager\Controller@postEdit', array($t->group));
 
                 $result = '<a href="#edit" class="vsch_editable status-' . ($t->status ?: 0)
                     . ' locale-' . $t->locale
@@ -236,7 +321,7 @@ class Translator extends LaravelTranslator
                     . '"  data-type="textarea" data-pk="' . ($t->id ?: 0) . '" '
                     . 'data-url="' . $action
                     . '" ' . 'data-inputclass="editable-input" data-saved_value="' . htmlentities($t->saved_value, ENT_QUOTES, 'UTF-8', false) . '" '
-                    . 'data-title="' . $title . ': [' . $t->locale . '] ' . $t->group . '.' . $t->key . '">' . ($t ? htmlentities($t->value, ENT_QUOTES, 'UTF-8', false) : '') . '</a> ' . $diff;
+                    . 'data-title="' . $title . ': [' . $t->locale . '] ' . $t->group . '.' . $t->key . '">' . (htmlentities($t->value, ENT_QUOTES, 'UTF-8', false)) . '</a> ' . ($t->diff ? " [$t->diff]" : '');
                 return $result;
             }
 
@@ -260,13 +345,99 @@ class Translator extends LaravelTranslator
     }
 
     /**
+     * Get the translation for a given key from the JSON translation files.
+     *
+     * @param  string $key
+     * @param  array $replace
+     * @param  string $locale
+     * @param  int $useDB null - check usedb field which is set to 1 by default,
+     *                       0 - don't use,
+     *                       1 - only if key is missing in files or saved in the translator cache, use saved_value
+     *                       fallback on $key,
+     *                       2 - always use value from db, (unpublished value) not cached.
+     *
+     * @return string
+     */
+    public function getFromJson($key, array $replace = [], $locale = null, $useDB = null)
+    {
+        // see if json key and can be translated to ltm key
+        $this->load('*', '*', 'json');
+        // see if have it in the cache
+        $item = $this->manager->cachedTranslation('', 'JSON', $key, 'json');
+        if ($item === null) {
+            if (array_key_exists($key, $this->loaded['*']['*']['json'])) {
+                $item = $this->loaded['*']['*']['json'][$key];
+            }
+        }
+        if ($item == null) return $this->get($key, $replace, $locale, true, $useDB);   // not a json key
+
+        $locale = $locale ?: $this->locale;
+        if ($useDB === null) $useDB = $this->useDB;
+        $group = 'JSON';
+        $namespace = '';
+
+        if ($useDB && $useDB !== 2) {
+            $result = $this->manager->cachedTranslation($namespace, $group, $item, $locale ?: $this->locale());
+            if ($result) {
+                $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
+                return $this->processResult($result, $replace);
+            }
+        }
+
+        if ($useDB == 2) {
+            if ($this->manager && $group && $item && !$this->manager->excludedPageEditGroup($group)) {
+                $t = $this->manager->missingKey($namespace, $group, $item, $locale, $this->isUseLottery(), true);
+                if ($t) {
+                    $result = $t->value ?: $key;
+                    if ($t->isDirty()) $t->save();
+                    $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
+                    return $this->processResult($result, $replace);
+                }
+            }
+        }
+
+        // get the JSON translation
+        $this->load('*', '*', $locale);
+        if (array_key_exists($key, $this->loaded['*']['*'][$locale])) {
+            $result = $this->loaded['*']['*'][$locale][$key];
+        } else {
+            unset($result);
+        }
+
+        // If we can't find a translation for the JSON key, we will attempt to translate it
+        // using the typical translation file. This way developers can always just use a
+        // helper such as __ instead of having to pick between trans or __ with views.
+        if (!isset($result)) {
+            if ($useDB === 1) {
+                if ($this->manager && $group && $item && !$this->manager->excludedPageEditGroup($group)) {
+                    $t = $this->manager->missingKey($namespace, $group, $item, $locale, $this->isUseLottery(), true);
+                    if ($t) {
+                        $result = $t->saved_value ?: $key;
+                        if ($t->isDirty()) $t->save();
+
+                        // save in cache even if it has no value to prevent hitting the database every time just to figure it out
+                        $this->manager->cacheTranslation($namespace, $group, $item, $result, $locale ?: $this->getLocale());
+                        return $this->processResult($result, $replace);
+                    }
+                }
+            }
+
+            $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
+            $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
+        } else {
+            $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
+        }
+        return $result;
+    }
+
+    /**
      * Get the translation for the given key.
      *
      * @param  string $key
-     * @param  array  $replace
+     * @param  array $replace
      * @param  string $locale
-     * @param bool    $fallback
-     * @param  int    $useDB null - check usedb field which is set to 1 by default,
+     * @param bool $fallback
+     * @param  int $useDB null - check usedb field which is set to 1 by default,
      *                       0 - don't use,
      *                       1 - only if key is missing in files or saved in the translator cache, use saved_value
      *                       fallback on $key,
@@ -286,17 +457,17 @@ class Translator extends LaravelTranslator
         }
 
         if (!$this->suspendInPlaceEdit && $this->inPlaceEditing() && $inplaceEditMode == 1) {
-            $this->notifyUsingKey($key, $locale);
+            $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
             return $this->inPlaceEditLink(null, true, $key, $locale);
         }
 
-        $cacheKey = null;
         if ($useDB === null) $useDB = $this->useDB;
 
         if ($useDB && $useDB !== 2) {
-            $result = $this->manager->cachedTranslation($namespace, $group, $item,$locale ?: $this->locale());
+            $augmentedGroup = $this->manager->getAugmentedGroup($namespace, $group);
+            $result = $this->manager->cachedTranslation('', $augmentedGroup, $item, $locale ?: $this->locale());
             if ($result) {
-                $this->notifyUsingKey($key, $locale);
+                $this->notifyUsingGroupItem('', $augmentedGroup, $item, $locale);
                 return $this->processResult($result, $replace);
             }
         }
@@ -306,8 +477,11 @@ class Translator extends LaravelTranslator
                 $t = $this->manager->missingKey($namespace, $group, $item, $locale, $this->isUseLottery(), true);
                 if ($t) {
                     $result = $t->value ?: $key;
-                    if ($t->isDirty()) $t->save();
-                    $this->notifyUsingKey($key, $locale);
+                    if ($t->isDirty()) {
+                        unset($t->diff); // remove value added by inplaceedit link
+                        $t->save();
+                    }
+                    $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
                     return $this->processResult($result, $replace);
                 }
             }
@@ -320,7 +494,10 @@ class Translator extends LaravelTranslator
                     $t = $this->manager->missingKey($namespace, $group, $item, $locale, $this->isUseLottery(), true);
                     if ($t) {
                         $result = $t->saved_value ?: $key;
-                        if ($t->isDirty()) $t->save();
+                        if ($t->isDirty()) {
+                            unset($t->diff); // remove value added by inplaceedit link
+                            $t->save();
+                        }
 
                         // save in cache even if it has no value to prevent hitting the database every time just to figure it out
                         if (true || $result !== $key) {
@@ -328,16 +505,16 @@ class Translator extends LaravelTranslator
                             $this->manager->cacheTranslation($namespace, $group, $item, $result, $locale ?: $this->getLocale());
                             return $this->processResult($result, $replace);
                         }
-                        $this->notifyUsingKey($key, $locale);
+                        $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
                         return $result;
                     }
                 }
             }
 
-            $this->notifyMissingKey($key, $locale);
-            $this->notifyUsingKey($key, $locale);
+            $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
+            $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
         } else {
-            $this->notifyUsingKey($key, $locale);
+            $this->notifyUsingGroupItem($namespace, $group, $item, $locale);
         }
         return $result;
     }
@@ -458,11 +635,11 @@ HTML;
      * Get a translation according to an integer value.
      *
      * @param  string $id
-     * @param  int    $number
-     * @param  array  $parameters
+     * @param  int $number
+     * @param  array $parameters
      * @param  string $locale
      * @param  string $domain
-     * @param null    $useDB
+     * @param null $useDB
      *
      * @return string
      */
@@ -475,10 +652,10 @@ HTML;
      * Get the translation for a given key.
      *
      * @param  string $id
-     * @param  array  $parameters
+     * @param  array $parameters
      * @param  string $locale
      * @param  string $domain
-     * @param null    $useDB
+     * @param null $useDB
      *
      * @return string
      */
@@ -491,8 +668,8 @@ HTML;
      * Get a translation according to an integer value.
      *
      * @param  string $key
-     * @param  int    $number
-     * @param  array  $replace
+     * @param  int $number
+     * @param  array $replace
      * @param  string $locale
      *
      * @return string
@@ -527,35 +704,53 @@ HTML;
         $this->packagePrefix = $this->package . '::';
         $this->cookiePrefix = $this->manager->config('persistent_prefix', $this->packagePrefix);
         $this->useCookies = $this->manager->config('use_cookies', true);
+        $this->cookiesLoaded = !$this->useCookies;
     }
 
-    protected function notifyMissingKey($key, $locale = null)
+    protected function notifyMissingGroupItem($namespace, $group, $item, $locale = null)
     {
-        list($namespace, $group, $item) = $this->parseKey($key);
         if ($this->manager && $group && $item && !$this->manager->excludedPageEditGroup($group)) {
             $this->manager->missingKey($namespace, $group, $item, $locale, $this->isUseLottery(), false);
         }
     }
 
-    protected function notifyUsingKey($key, $locale = null)
+    protected function notifyUsingGroupItem($namespace, $group, $item, $locale = null)
     {
         if (!$this->suspendUsageLogging) {
-            list($namespace, $group, $item) = $this->parseKey($key);
             if ($this->manager && $group && $item && !$this->manager->excludedPageEditGroup($group)) {
-                $this->manager->usingKey($namespace, $group, $item, $locale, $this->isUseLottery());
+                $augmentedGroup = $this->manager->getAugmentedGroup($namespace, $group);
+                $this->manager->usingKey('', $augmentedGroup, $item, $locale, $this->isUseLottery());
             }
         }
     }
 
     public static function routes()
     {
-        Controller::routes();
+        $config = App::get('config')[\Vsch\TranslationManager\ManagerServiceProvider::PACKAGE];
+        $key = \Vsch\TranslationManager\Manager::DISABLE_REACT_UI;
+
+        $disableReactUI = array_key_exists($key, $config) ? $config[$key] : false;
+        Controller::routes($disableReactUI);
+    }
+
+    public static function webRoutes()
+    {
+        Controller::webRoutes();
+    }
+
+    public static function apiRoutes()
+    {
+        $config = App::get('config')[\Vsch\TranslationManager\ManagerServiceProvider::PACKAGE];
+        $key = \Vsch\TranslationManager\Manager::DISABLE_REACT_UI;
+
+        $disableReactUI = array_key_exists($key, $config) ? $config[$key] : false;
+        Controller::apiRoutes($disableReactUI);
     }
 
     public function getLocales()
     {
         //Set the default locale as the first one.
-        $currentLocale = \Config::get('app.locale');
+        $currentLocale = Config::get('app.locale');
         $locales = ManagerServiceProvider::getLists($this->manager->getTranslation()->groupBy('locale')->pluck('locale')) ?: [];
 
         // limit the locale list to what is in the config

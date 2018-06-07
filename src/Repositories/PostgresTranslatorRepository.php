@@ -26,14 +26,14 @@ class PostgresTranslatorRepository extends TranslatorRepository
         }
 
         if ($setKeys) {
-            $this->connection->affectingStatement($this->adjustTranslationTable(<<<SQL
-                UPDATE ltm_translations SET was_used = 1 WHERE was_used <> 0 AND ("group" = ? OR "group" LIKE ? OR "group" LIKE ?)
+            $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
+                UPDATE ltm_translations SET was_used = 1 WHERE was_used = 0 AND ("group" = ? OR "group" LIKE ? OR "group" LIKE ?) AND "key" IN ($setKeys)
 SQL
             ), [$group, 'vnd:%.' . $group, 'wbn:%.' . $group]);
         }
 
         if ($resetKeys) {
-            $this->connection->affectingStatement($this->adjustTranslationTable(<<<SQL
+            $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
             UPDATE ltm_translations SET was_used = 0 WHERE was_used <> 0 AND ("group" = ? OR "group" LIKE ? OR "group" LIKE ?) AND "key" IN ($resetKeys)
 SQL
             ), [$group, 'vnd:%.' . $group, 'wbn:%.' . $group]);
@@ -44,7 +44,7 @@ SQL
     {
         $whereClause = $value == 1 ? 0 : 1;
 
-        return $this->connection->update($this->adjustTranslationTable(<<<SQL
+        return $this->translation->getConnection()->update($this->adjustTranslationTable(<<<SQL
 UPDATE ltm_translations SET is_deleted = ? WHERE is_deleted = $whereClause AND "group" = ? AND "key" = ?
 SQL
         ), [$value, $group, $key]);
@@ -52,7 +52,7 @@ SQL
 
     public function updateGroupKeyStatusById($group, $key, $id)
     {
-        $this->connection->update($this->adjustTranslationTable('UPDATE ltm_translations SET "group" = ?, "key" = ?, status = 1 WHERE id = ?'), [$group, $key, $id]);
+        $this->translation->getConnection()->update($this->adjustTranslationTable('UPDATE ltm_translations SET "group" = ?, "key" = ?, status = 1 WHERE id = ?'), [$group, $key, $id]);
     }
 
     public function selectTranslationsByLocaleAndGroup($locale, $db_group)
@@ -65,7 +65,7 @@ SQL
 
     public function selectSourceByGroupAndKey($group, $key)
     {
-        return $this->connection->select($this->adjustTranslationTable(<<<SQL
+        return $this->translation->getConnection()->select($this->adjustTranslationTable(<<<SQL
 SELECT source FROM ltm_translations WHERE "group" = ? AND "key" = ?
 SQL
         ), [$group, $key]);
@@ -77,34 +77,54 @@ SQL
     public function insertTranslations($values)
     {
         $sql = $this->adjustTranslationTable('INSERT INTO ltm_translations (status, locale, "group", "key", "value", created_at, updated_at, source, saved_value, is_deleted, was_used) VALUES ' . implode(",", $values));
-        $this->connection->unprepared($sql);
+        $this->translation->getConnection()->unprepared($sql);
     }
 
     public function deleteTranslationWhereIsDeleted($group = null)
     {
         if (!$group) {
-            $this->connection->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE is_deleted = 1'));
+            $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE is_deleted = 1'));
         } else {
-            $this->connection->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE is_deleted = 1 AND "group" = ?'), [$group]);
+            $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE is_deleted = 1 AND "group" = ?'), [$group]);
         }
     }
 
     public function deleteTranslationByGroup($group)
     {
-        $this->connection->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE "group" = ?'), [$group]);
+        $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE "group" = ?'), [$group]);
     }
 
-    public function updateValueInGroup($group)
+    public function deleteTranslationByGroupLocale($group, $locale)
     {
-        $this->connection->affectingStatement($this->adjustTranslationTable(<<<SQL
-UPDATE ltm_translations SET saved_value = "value", status = ? WHERE (saved_value <> "value" || status <> ?) AND "group" = ?
+        $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE "group" = ? AND locale = ?'), [$group, $locale]);
+    }
+
+    public function updatePublishTranslations($newStatus, $group = null, $locale = null)
+    {
+        if ($group) {
+            if ($locale) {
+                $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
+UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (ifnull(saved_value,'') <> ifnull("value",'') || (status <> ? and status <> ?)) AND "group" = ? AND locale = ?
 SQL
-        ), [Translation::STATUS_SAVED_CACHED, Translation::STATUS_SAVED, $group]);
+                ), [$newStatus, $newStatus, Translation::STATUS_SAVED, $group, $locale]);
+            } else {
+                $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
+UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (ifnull(saved_value,'') <> ifnull("value",'') || (status <> ? and status <> ?)) AND "group" = ?
+SQL
+                ), [$newStatus, $newStatus, Translation::STATUS_SAVED, $group]);
+            }
+        } else {
+            $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
+UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (ifnull(saved_value,'') <> ifnull("value",'') || (status <> ? and status <> ?))
+SQL
+            ), [$newStatus, $newStatus, Translation::STATUS_SAVED]);
+        }
     }
 
-    public function searchByRequest($q, $displayWhere)
+    public function searchByRequest($q, $displayWhere, $limit)
     {
-        return $this->connection->select($this->adjustTranslationTable(<<<SQL
+        $limitSQL = $limit > 0 ? 'LIMIT ' . $limit : '';
+        return $this->translation->getConnection()->select($this->adjustTranslationTable(<<<SQL
 SELECT  
     id, status, locale, "group", "key", "value", created_at, updated_at, source, saved_value, is_deleted, was_used
     FROM ltm_translations rt WHERE ("key" LIKE ? OR "value" LIKE ?) $displayWhere
@@ -114,14 +134,15 @@ FROM (SELECT DISTINCT locale FROM ltm_translations  WHERE 1=1 $displayWhere) lt
     CROSS JOIN (SELECT DISTINCT "key", "group" FROM ltm_translations  WHERE 1=1 $displayWhere) kt
 WHERE NOT exists(SELECT * FROM ltm_translations  tr WHERE tr."key" = kt."key" AND tr."group" = kt."group" AND tr.locale = lt.locale)
       AND "key" LIKE ?
-ORDER BY "key", "group", locale
+ORDER BY "key", "group", locale 
+$limitSQL
 SQL
         ), [$q, $q, $q,]);
     }
 
     public function allTranslations($group, $displayLocales)
     {
-        $displayWhere = $displayLocales ? ' AND locale IN (\'' . implode("','", explode(',', $displayLocales)) . "')" : '';
+        $displayWhere = $displayLocales ? " AND locale IN ('" . implode("','", $displayLocales) . "')" : '';
 
         return $this->getTranslation()->fromQuery($this->adjustTranslationTable(<<<SQL
 SELECT  
@@ -165,9 +186,9 @@ SQL
 
     public function stats($displayLocales)
     {
-        $displayWhere = $displayLocales ? ' AND locale IN (\'' . implode("','", explode(',', $displayLocales)) . "')" : '';
+        $displayWhere = $displayLocales ? " AND locale IN ('" . implode("','", $displayLocales) . "')" : '';
 
-        return $this->connection->select($this->adjustTranslationTable(<<<SQL
+        return $this->translation->getConnection()->select($this->adjustTranslationTable(<<<SQL
 SELECT (mx.total_keys - lcs.total) missing, lcs.changed, lcs.cached, lcs.deleted, lcs.locale, lcs."group"
 FROM
     (SELECT sum(total) total, sum(changed) changed, sum(cached) cached, sum(deleted) deleted, "group", locale
@@ -184,16 +205,16 @@ FROM
      GROUP BY "group", locale) lcs
     JOIN (SELECT count(DISTINCT "key") total_keys, "group" FROM ltm_translations WHERE 1=1 $displayWhere GROUP BY "group") mx
         ON lcs."group" = mx."group"
-WHERE lcs.total < mx.total_keys OR lcs.changed > 0 OR lcs.cached > 0 OR lcs.deleted > 0
+WHERE  (lcs.total < mx.total_keys OR lcs.changed > 0 OR lcs.cached > 0 OR lcs.deleted > 0) AND locale <> 'json'
 SQL
         ));
     }
 
     public function findMismatches($displayLocales, $primaryLocale, $translatingLocale)
     {
-        $displayWhere = $displayLocales ? ' AND locale IN (\'' . implode("','", explode(',', $displayLocales)) . "')" : '';
+        $displayWhere = $displayLocales ? " AND locale IN ('" . implode("','", $displayLocales) . "')" : '';
 
-        return $this->connection->select($this->adjustTranslationTable(<<<SQL
+        return $this->translation->getConnection()->select($this->adjustTranslationTable(<<<SQL
 SELECT DISTINCT lt.*, ft.ru, ft.en
 FROM (SELECT * FROM ltm_translations WHERE 1=1 $displayWhere) lt
     JOIN
@@ -222,7 +243,7 @@ SQL
 
     public function selectToDeleteTranslations($group, $key, $locale, $rowIds)
     {
-        return $this->connection->select($this->adjustTranslationTable(<<<SQL
+        return $this->translation->getConnection()->select($this->adjustTranslationTable(<<<SQL
 SELECT id FROM ltm_translations tr
 WHERE "group" = ? AND "key" = ? AND locale IN (?) AND id NOT IN ($rowIds)
 
@@ -230,13 +251,14 @@ SQL
         ), [$group, $key, $locale]);
     }
 
-    public function selectKeys($src, $dst, $userLocales, $srcgrp, $srckey, $dstkey, $dstgrp)
+    public function selectKeys($src, $dst, $locales, $srcgrp, $srckey, $dstkey, $dstgrp)
     {
+        $userLocales = "'" . implode("','", $locales) . "'";
         $ltm_translations = $this->getTranslationsTableName();
 
         if ((substr($src, 0, 1) === '*')) {
             if ($dst === null) {
-                $rows = $this->connection->select($this->adjustTranslationTable($sql = <<<SQL
+                $rows = $this->translation->getConnection()->select($this->adjustTranslationTable($sql = <<<SQL
 SELECT DISTINCT "group", "key", locale, id, NULL dst, NULL dstgrp FROM $ltm_translations t1
 WHERE "group" = ? AND "key" LIKE BINARY ? AND locale IN ($userLocales)
 ORDER BY locale, "key"
@@ -247,7 +269,7 @@ SQL
                     '%' . mb_substr($srckey, 1),
                 ]);
             } else {
-                $rows = $this->connection->select($this->adjustTranslationTable($sql = <<<SQL
+                $rows = $this->translation->getConnection()->select($this->adjustTranslationTable($sql = <<<SQL
 SELECT DISTINCT "group", "key", locale, id, CONCAT(SUBSTR("key", 1, CHAR_LENGTH("key")-?), ?) dst, ? dstgrp FROM $ltm_translations t1
 WHERE "group" = ? AND "key" LIKE BINARY '?' AND locale IN ($userLocales)
 AND NOT exists(SELECT * FROM $ltm_translations t2 WHERE t2.value IS NOT NULL AND t2."group" = ? AND t1.locale = t2.locale
@@ -263,12 +285,12 @@ SQL
                     '%' . mb_substr($srckey, 1),
                     $dstgrp,
                     mb_strlen($srckey) - 1,
-                    mb_substr($dstkey, 1)
+                    mb_substr($dstkey, 1),
                 ]);
             }
-        } elseif ((substr($src, -1, 1) === '*')) {
+        } else if ((substr($src, -1, 1) === '*')) {
             if ($dst === null) {
-                $rows = $this->connection->select($this->adjustTranslationTable($sql = <<<SQL
+                $rows = $this->translation->getConnection()->select($this->adjustTranslationTable($sql = <<<SQL
 SELECT DISTINCT "group", "key", locale, id, NULL dst, NULL dstgrp FROM $ltm_translations t1
 WHERE "group" = ? AND "key" LIKE BINARY '?' AND locale IN ($userLocales)
 ORDER BY locale, "key"
@@ -279,7 +301,7 @@ SQL
                     mb_substr($srckey, 0, -1) . '%',
                 ]);
             } else {
-                $rows = $this->connection->select($this->adjustTranslationTable($sql = <<<SQL
+                $rows = $this->translation->getConnection()->select($this->adjustTranslationTable($sql = <<<SQL
 SELECT DISTINCT "group", "key", locale, id, CONCAT(?, SUBSTR("key", ?+1, CHAR_LENGTH("key")-?)) dst, ? dstgrp FROM $ltm_translations t1
 WHERE "group" = ? AND "key" LIKE BINARY '?' AND locale IN ($userLocales)
 AND NOT exists(SELECT * FROM $ltm_translations t2 WHERE t2.value IS NOT NULL AND t2."group" = ? AND t1.locale = t2.locale
@@ -297,12 +319,12 @@ SQL
                     $dstgrp,
                     mb_substr($dstkey, 0, -1),
                     mb_strlen($srckey) - 1,
-                    mb_strlen($srckey) - 1
+                    mb_strlen($srckey) - 1,
                 ]);
             }
         } else {
             if ($dst === null) {
-                $rows = $this->connection->select($this->adjustTranslationTable($sql = <<<SQL
+                $rows = $this->translation->getConnection()->select($this->adjustTranslationTable($sql = <<<SQL
 SELECT DISTINCT "group", "key", locale, id, NULL dst, NULL dstgrp FROM $ltm_translations t1
 WHERE "group" = ? AND "key" LIKE ? AND locale IN ($userLocales)
 ORDER BY locale, "key"
@@ -313,7 +335,7 @@ SQL
                     $srckey,
                 ]);
             } else {
-                $rows = $this->connection->select($this->adjustTranslationTable($sql = <<<SQL
+                $rows = $this->translation->getConnection()->select($this->adjustTranslationTable($sql = <<<SQL
 SELECT DISTINCT "group", "key", locale, id, ? dst, ? dstgrp FROM $ltm_translations t1
 WHERE "group" = ? AND "key" LIKE  ? AND locale IN ($userLocales)
 AND NOT exists(SELECT * FROM $ltm_translations t2 WHERE t2.value IS NOT NULL AND t2."group" = ? AND t1.locale = t2.locale AND t2."key" LIKE ?)
@@ -338,7 +360,7 @@ SQL
     {
         $ltm_translations = $this->getTranslationsTableName();
 
-        return $this->connection->insert($this->adjustTranslationTable(<<<SQL
+        return $this->translation->getConnection()->insert($this->adjustTranslationTable(<<<SQL
 INSERT INTO $ltm_translations (status, locale, "group", "key", "value", created_at, updated_at, source, saved_value, is_deleted, was_used) 
 SELECT
     1 status,

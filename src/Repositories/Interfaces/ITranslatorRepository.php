@@ -2,8 +2,24 @@
 
 namespace Vsch\TranslationManager\Repositories\Interfaces;
 
+use Vsch\TranslationManager\Models\Translation;
+
 interface ITranslatorRepository
 {
+    /**
+     * Return the translation used for database access.
+     * 
+     * All connection changes will be done on this instance
+     * Its connection MUST BE USED FOR ALL OPERATIONS
+     * 
+     * Otherwise alternate connections in the UI will not work properly
+     * DO NOT CACHE ITS CONNECTION except in local variable of a function for the 
+     * duration of the function.
+     * 
+     * @return Translation
+     */
+    public function getTranslation();
+
     public function updateIsDeletedByIds($rowId);
 
     public function setNotUsedForAllTranslations();
@@ -13,8 +29,6 @@ interface ITranslatorRepository
     public function getInsertTranslationsElement($translation, $timeStamp);
 
     public function deleteTranslationsForIds($translationIds);
-
-    public function updateValuesByStatus();
 
     public function updateUsedTranslationsForGroup($keys, $group);
 
@@ -31,10 +45,12 @@ interface ITranslatorRepository
     public function deleteTranslationWhereIsDeleted($group = null);
 
     public function deleteTranslationByGroup($group);
+    
+    public function deleteTranslationByGroupLocale($group, $locale);
 
-    public function updateValueInGroup($group);
+    public function updatePublishTranslations($newStatus, $group = null, $locale = null);
 
-    public function searchByRequest($q, $displayWhere);
+    public function searchByRequest($q, $displayWhere, $limit);
 
     public function allTranslations($group, $displayLocales);
 
@@ -44,7 +60,7 @@ interface ITranslatorRepository
 
     public function selectToDeleteTranslations($group, $key, $locale, $rowIds);
 
-    public function selectKeys($src, $dst, $userLocales, $srcgrp, $srckey, $dstkey, $dstgrp);
+    public function selectKeys($src, $dst, $locales, $srcgrp, $srckey, $dstkey, $dstgrp);
 
     public function copyKeys($dstgrp, $dstkey, $rowId);
 
