@@ -2,7 +2,6 @@
 
 namespace Vsch\TranslationManager\Repositories;
 
-use Illuminate\Support\Facades\DB;
 use Vsch\TranslationManager\Models\Translation;
 
 class PostgresTranslatorRepository extends TranslatorRepository
@@ -99,25 +98,25 @@ SQL
         $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable('DELETE FROM ltm_translations WHERE "group" = ? AND locale = ?'), [$group, $locale]);
     }
 
-    public function updatePublishTranslations($newStatus, $group = null, $locale = null)
+    public function updatePublishTranslations($group = null, $locale = null)
     {
         if ($group) {
             if ($locale) {
                 $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
-UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (ifnull(saved_value,'') <> ifnull("value",'') || (status <> ? and status <> ?)) AND "group" = ? AND locale = ?
+UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (saved_value <> "value" || status <> ?) AND "group" = ? AND locale = ?
 SQL
-                ), [$newStatus, $newStatus, Translation::STATUS_SAVED, $group, $locale]);
+                ), [Translation::STATUS_SAVED_CACHED, Translation::STATUS_SAVED, $group, $locale]);
             } else {
                 $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
-UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (ifnull(saved_value,'') <> ifnull("value",'') || (status <> ? and status <> ?)) AND "group" = ?
+UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (saved_value <> "value" || status <> ?) AND "group" = ?
 SQL
-                ), [$newStatus, $newStatus, Translation::STATUS_SAVED, $group]);
+                ), [Translation::STATUS_SAVED_CACHED, Translation::STATUS_SAVED, $group]);
             }
         } else {
             $this->translation->getConnection()->affectingStatement($this->adjustTranslationTable(<<<SQL
-UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (ifnull(saved_value,'') <> ifnull("value",'') || (status <> ? and status <> ?))
+UPDATE ltm_translations SET saved_value = "value", status = ?, is_auto_added = 0 WHERE (saved_value <> "value" || status <> ?)
 SQL
-            ), [$newStatus, $newStatus, Translation::STATUS_SAVED]);
+            ), [Translation::STATUS_SAVED_CACHED, Translation::STATUS_SAVED]);
         }
     }
 
