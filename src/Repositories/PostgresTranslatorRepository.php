@@ -383,6 +383,6 @@ SQL
 
     public function findFilledGroups()
     {
-        return $this->translation->whereNotNull('value')->select(DB::raw('DISTINCT "group"'))->get('group');
+        return $this->translation->whereNotNull('value')->select(\DB::raw('DISTINCT "group"'))->get('group');
     }
 }
